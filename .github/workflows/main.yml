@@ -18,11 +18,6 @@ jobs:
       with:
         node-version: '14'
 
-    - name: Build project # This step is optional, as there's no build process for a single index.html file
-      run: |
-        npm install
-        npm run build
-
     - name: Deploy to GitHub Pages
       uses: peaceiris/actions-gh-pages@v3
       with:
