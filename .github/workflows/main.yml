@@ -1,0 +1,30 @@
+name: Build and Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main  # Set your default branch name
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v2
+      with:
+        node-version: '14'
+
+    - name: Build project # This step is optional, as there's no build process for a single index.html file
+      run: |
+        npm install
+        npm run build
+
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./  # Set the directory path of your generated site
