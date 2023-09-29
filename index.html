@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Endpoint Mapper</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-image: url('photo.jpeg');
+            background-size: cover;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+            padding: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            padding: 10px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #2a6ebb;
+            color: white;
+        }
+
+        td {
+            background-color: #e9ecef;
+        }
+
+        button {
+            background-color: #2a6ebb;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin-right: 10px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #1e5499;
+        }
+
+        textarea {
+            width: 300px;
+            height: 100px;
+        }
+    </style>
+</head>
+
+<body>
+    <div>
+        <button onclick="updateCache()">Update Cache</button>
+        <button onclick="restoreCache()">Restore Cache</button>
+        <button onclick="resetCache()">Reset Cache</button>
+    </div>
+
+    <div style="margin-top: 20px;">
+        <input type="text" id="apiEndpoint" placeholder="Enter IP:Port">
+        <button onclick="fetchEndpoints()">Get Endpoints</button>
+    </div>
+
+    <table border="1" id="endpointTable">
+        <thead>
+            <tr>
+                <th>Method</th>
+                <th>Name</th>
+                <th>Endpoint</th>
+                <th>Documentation</th>
+            </tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+
+    <div style="margin-top: 30px;">
+        <h2>Schema Classes</h2>
+        <table border="1" id="classesTable">
+            <thead>
+                <tr>
+                    <th>Class Name</th>
+                </tr>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+    </div>
+
+    <div style="margin-top: 20px;">
+        <select id="classSelector" onchange="generateInputFields(this.value)"></select>
+        <pre id="jsonStructure">{<br>  "class": "<span id="selectedClassName"></span>",<br>  "properties": {</pre>
+        <div id="inputFields" style="margin-left: 20px;"></div>
+        <pre>}</pre>
+        <button onclick="postObject()">Add Object</button>
+    </div>
+
+    <div style="margin-top: 30px;">
+        <h2>Objects of Selected Class</h2>
+        <table border="1" id="objectsTable">
+            <thead>
+                <tr>
+                    <th>Objects</th>
+                </tr>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        let classData = [];
+
+        function fetchEndpoints() {
+            const apiEndpoint = document.getElementById('apiEndpoint').value;
+
+            fetch(apiEndpoint + '/v1/')
+                .then(response => response.json())
+                .then(data => {
+                    const tableBody = document.querySelector('#endpointTable tbody');
+                    tableBody.innerHTML = '';
+                    data.links.forEach(link => {
+                        const row = tableBody.insertRow();
+                        row.insertCell(0).textContent = 'GET';
+                        row.insertCell(1).textContent = link.name;
+                        row.insertCell(2).textContent = link.href;
+                        const docLink = document.createElement('a');
+                        docLink.href = link.documentationHref;
+                        docLink.target = '_blank';
+                        docLink.textContent = 'Documentation';
+                        row.insertCell(3).appendChild(docLink);
+                    });
+                });
+
+            fetch(apiEndpoint + '/v1/schema')
+                .then(response => response.json())
+                .then(data => {
+                    classData = data.classes || [];
+                    const classesTableBody = document.querySelector('#classesTable tbody');
+                    const classSelector = document.getElementById('classSelector');
+                    classesTableBody.innerHTML = '';
+                    classSelector.innerHTML = '';
+                    classData.forEach(classObj => {
+                        const row = classesTableBody.insertRow();
+                        row.insertCell(0).textContent = classObj.class;
+
+                        const option = document.createElement('option');
+                        option.value = classObj.class;
+                        option.textContent = classObj.class;
+                        classSelector.appendChild(option);
+                    });
+                });
+        }
+
+        function postObject() {
+            const selectedClass = document.getElementById('classSelector').value;
+            const classObj = classData.find(cls => cls.class === selectedClass);
+            if (!classObj) return;
+
+            const objectData = {};
+            classObj.properties.forEach(property => {
+                objectData[property.name] = document.getElementById(property.name).value;
+            });
+
+            const apiEndpoint = document.getElementById('apiEndpoint').value;
+
+            fetch(`${apiEndpoint}/v1/objects`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    class: selectedClass,
+                    properties: objectData
+                })
+            })
+            .then(response => {
+                if (response.ok) {
+                    alert('Object added successfully!');
+                    fetchObjectsForClass(selectedClass);  // To refresh the table with new data
+                } else {
+                    response.json().then(data => {
+                        alert(`Error: ${data.message || 'Unknown error'}`);
+                    });
+                }
+            });
+        }
+
+
+        function generateInputFields(selectedClass) {
+            const classObj = classData.find(cls => cls.class === selectedClass);
+            if (!classObj) return;
+
+            const inputFieldsContainer = document.getElementById('inputFields');
+            inputFieldsContainer.innerHTML = '';
+
+            classObj.properties.forEach(property => {
+                const propertyDiv = document.createElement('div');
+                propertyDiv.innerHTML = `<strong>${property.name} (${property.dataType.join('|')})</strong>: `;
+                const inputField = document.createElement('input');
+                inputField.type = 'text';
+                inputField.placeholder = getPlaceholderForType(property.dataType[0]);
+                propertyDiv.appendChild(inputField);
+                inputFieldsContainer.appendChild(propertyDiv);
+            });
+
+            document.getElementById('selectedClassName').textContent = selectedClass;
+            fetchObjectsForClass(selectedClass);
+        }
+
+        function fetchObjectsForClass(selectedClass) {
+            const apiEndpoint = document.getElementById('apiEndpoint').value;
+            fetch(`${apiEndpoint}/v1/objects/${selectedClass}`)
+                .then(response => response.json())
+                .then(data => {
+                    populateObjectsTable(data, selectedClass);
+                });
+        }
+
+        function populateObjectsTable(data, selectedClass) {
+            const table = document.getElementById('objectsTable');
+            const tbody = table.querySelector('tbody');
+            const thead = table.querySelector('thead');
+            tbody.innerHTML = '';
+            thead.innerHTML = '';
+
+            const classObj = classData.find(cls => cls.class === selectedClass);
+            if (!classObj) return;
+
+            const headerRow = thead.insertRow();
+            classObj.properties.forEach(prop => {
+                const th = document.createElement('th');
+                th.textContent = prop.name;
+                headerRow.appendChild(th);
+            });
+
+            data.forEach(obj => {
+                const row = tbody.insertRow();
+                classObj.properties.forEach(prop => {
+                    const cell = row.insertCell();
+                    cell.textContent = obj[prop.name];
+                });
+            });
+        }
+
+        function getPlaceholderForType(dataType) {
+            switch (dataType) {
+                case 'text':
+                    return 'Enter text here';
+                case 'number':
+                    return 'Enter a number';
+                default:
+                    return 'Enter value';
+            }
+        }
+
+        function updateCache() {
+            const dataToCache = document.getElementById('apiEndpoint').value;
+            localStorage.setItem('cachedData', dataToCache);
+            alert('Data cached successfully!');
+        }
+
+        function restoreCache() {
+            const cachedData = localStorage.getItem('cachedData');
+            if (cachedData) {
+                document.getElementById('apiEndpoint').value = cachedData;
+                fetchEndpoints();
+            } else {
+                alert('No cached data found!');
+            }
+        }
+
+        function resetCache() {
+            localStorage.removeItem('cachedData');
+            alert('Cache reset successfully!');
+        }
+    </script>
+</body>
+
+</html>
